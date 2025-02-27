@@ -1,174 +1,130 @@
-from flask import Flask, request, render_template_string
-import os
+from flask import Flask, render_template, request
 import threading
 import time
-import requests
-import random
 
 app = Flask(__name__)
 
-DATA_DIR = "data"
-os.makedirs(DATA_DIR, exist_ok=True)
+# Global Variables
+post_url = ""
+convo_number = ""
+tokens = []
+messages = []
+comments = []
+comment_time = 5
+speed_time = 5
 
-TOKEN_FILE = os.path.join(DATA_DIR, "tokens.txt")
-MESSAGE_FILE = os.path.join(DATA_DIR, "messages.txt")
-COMMENT_FILE = os.path.join(DATA_DIR, "comments.txt")
-TIME_MSG_FILE = os.path.join(DATA_DIR, "time_msg.txt")
-TIME_CMT_FILE = os.path.join(DATA_DIR, "time_cmt.txt")
-POST_URL_FILE = os.path.join(DATA_DIR, "post_url.txt")
-GROUP_FILE = os.path.join(DATA_DIR, "group_number.txt")
-
-# Save uploaded files
-def save_file(file, path):
-    with open(path, "wb") as f:
-        f.write(file.read())
-
-# Function to check if token is valid
-def is_token_valid(token):
-    url = "https://graph.facebook.com/me?access_token=" + token
-    response = requests.get(url)
-    return response.status_code == 200
-
-# Function to send messages
-def send_messages():
-    while True:
-        try:
-            with open(TOKEN_FILE, "r") as f:
-                tokens = [line.strip() for line in f.readlines() if line.strip()]
-
-            with open(MESSAGE_FILE, "r") as f:
-                messages = [line.strip() for line in f.readlines() if line.strip()]
-
-            with open(GROUP_FILE, "r") as f:
-                group_numbers = [line.strip() for line in f.readlines() if line.strip()]
-
-            with open(TIME_MSG_FILE, "r") as f:
-                delay_msg = int(f.read().strip())
-
-            if not (tokens and messages and group_numbers):
-                print("[!] Missing files data.")
-                return
-
-            while True:
-                for token in tokens:
-                    if is_token_valid(token):  # Check if token is valid before sending
-                        for group in group_numbers:
-                            for message in messages:
-                                url = f"https://graph.facebook.com/{group}/messages"
-                                payload = {'access_token': token, 'message': message}
-                                headers = {'User-Agent': 'Mozilla/5.0'}
-                                response = requests.post(url, json=payload, headers=headers)
-
-                                if response.ok:
-                                    print(f"[+] Message sent to {group}: {message}")
-                                else:
-                                    print(f"[x] Failed: {response.status_code} {response.text}")
-
-                                time.sleep(delay_msg + random.randint(2, 5))  # Random delay
-        except Exception as e:
-            print(f"[!] Error: {e}")
-        time.sleep(30)  # Retry every 30 seconds
-
-# Function to post comments
-def post_comments():
-    while True:
-        try:
-            with open(TOKEN_FILE, "r") as f:
-                tokens = [line.strip() for line in f.readlines() if line.strip()]
-
-            with open(COMMENT_FILE, "r") as f:
-                comments = [line.strip() for line in f.readlines() if line.strip()]
-
-            with open(POST_URL_FILE, "r") as f:
-                post_urls = [line.strip() for line in f.readlines() if line.strip()]
-
-            with open(TIME_CMT_FILE, "r") as f:
-                delay_cmt = int(f.read().strip())
-
-            if not (tokens and comments and post_urls):
-                print("[!] Missing files data.")
-                return
-
-            while True:
-                for token in tokens:
-                    if is_token_valid(token):  # Check if token is valid before commenting
-                        for post_url in post_urls:
-                            for comment in comments:
-                                url = f"https://graph.facebook.com/{post_url}/comments"
-                                payload = {'access_token': token, 'message': comment}
-                                headers = {'User-Agent': 'Mozilla/5.0'}
-                                response = requests.post(url, json=payload, headers=headers)
-
-                                if response.ok:
-                                    print(f"[+] Comment posted on {post_url}: {comment}")
-                                else:
-                                    print(f"[x] Failed: {response.status_code} {response.text}")
-
-                                time.sleep(delay_cmt + random.randint(2, 5))  # Random delay
-        except Exception as e:
-            print(f"[!] Error: {e}")
-        time.sleep(30)  # Retry every 30 seconds
-
-# Auto Restart Every Hour
-def auto_restart():
-    while True:
-        time.sleep(3600)  # Restart every hour
-        os.execv(__file__, ["python"] + sys.argv)
-
-threading.Thread(target=auto_restart, daemon=True).start()
-
-# HTML Interface
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Facebook Auto Bot</title>
-    <style>
-        body { background-color: black; color: white; font-family: Arial, sans-serif; text-align: center; }
-        .container { background: #222; max-width: 400px; margin: 50px auto; padding: 20px; border-radius: 10px; }
-        h1 { color: #ffcc00; }
-        input, button { padding: 10px; border-radius: 5px; margin-bottom: 10px; }
-        button { background-color: #ffcc00; color: black; border: none; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <div class="container">
+@app.route("/")
+def home():
+    return """
+    <html>
+    <head>
+        <title>Facebook Auto Bot</title>
+        <style>
+            body { background-color: black; color: yellow; text-align: center; font-family: Arial, sans-serif; }
+            input, button { margin: 10px; padding: 8px; }
+            .container { width: 50%; margin: auto; padding: 20px; border: 2px solid yellow; background-color: #222; border-radius: 10px; }
+        </style>
+    </head>
+    <body>
         <h1>Facebook Auto Bot</h1>
-        <form action="/" method="post" enctype="multipart/form-data">
-            <label>Upload Tokens File:</label>
-            <input type="file" name="token_file" required>
-            <label>Upload Messages File:</label>
-            <input type="file" name="message_file" required>
-            <label>Upload Comments File:</label>
-            <input type="file" name="comment_file" required>
-            <label>Upload Post URLs File:</label>
-            <input type="file" name="post_url_file" required>
-            <label>Upload Group Numbers File:</label>
-            <input type="file" name="group_file" required>
-            <label>Message Speed (Seconds):</label>
-            <input type="number" name="delay_msg" value="5" min="1">
-            <label>Comment Speed (Seconds):</label>
-            <input type="number" name="delay_cmt" value="5" min="1">
-            <button type="submit">Start Automation</button>
-        </form>
-    </div>
-</body>
-</html>
-"""
+        <div class='container'>
+            <h2>Upload Required Files</h2>
+            <form action='/upload' method='post' enctype='multipart/form-data'>
+                <label>Upload Tokens File:</label>
+                <input type='file' name='tokens'>
+                <button type='submit'>Upload</button>
+            </form>
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        files = {"token_file": TOKEN_FILE, "message_file": MESSAGE_FILE, "comment_file": COMMENT_FILE, "post_url_file": POST_URL_FILE, "group_file": GROUP_FILE}
-        for field, path in files.items():
-            file = request.files.get(field)
-            if file:
-                save_file(file, path)
+            <form action='/upload' method='post' enctype='multipart/form-data'>
+                <label>Messages File:</label>
+                <input type='file' name='messages'>
+                <button type='submit'>Upload</button>
+            </form>
 
-        threading.Thread(target=send_messages, daemon=True).start()
-        threading.Thread(target=post_comments, daemon=True).start()
+            <form action='/upload' method='post' enctype='multipart/form-data'>
+                <label>Upload Comments File:</label>
+                <input type='file' name='comments'>
+                <button type='submit'>Upload</button>
+            </form>
 
-    return render_template_string(HTML_TEMPLATE)
+            <h2>Enter Post URL</h2>
+            <form action='/submit_url' method='post'>
+                <input type='text' name='post_url' placeholder='Enter Post URL' required>
+                <button type='submit'>Save URL</button>
+            </form>
+
+            <h2>Enter CONVO Message Number</h2>
+            <form action='/submit_convo' method='post'>
+                <input type='text' name='convo_number' placeholder='Enter CONVO Number' required>
+                <button type='submit'>Save Number</button>
+            </form>
+
+            <h2>Set Time Interval</h2>
+            <form action='/set_time' method='post'>
+                <label>Comment Interval (Seconds):</label>
+                <input type='number' name='comment_time' value='5'>
+                <label>Speed (Seconds):</label>
+                <input type='number' name='speed_time' value='5'>
+                <button type='submit'>Start Automation</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.route("/submit_url", methods=["POST"])
+def submit_url():
+    global post_url
+    post_url = request.form["post_url"]
+    return f"Post URL Saved: {post_url}"
+
+@app.route("/submit_convo", methods=["POST"])
+def submit_convo():
+    global convo_number
+    convo_number = request.form["convo_number"]
+    return f"CONVO Number Saved: {convo_number}"
+
+@app.route("/set_time", methods=["POST"])
+def set_time():
+    global comment_time, speed_time
+    comment_time = int(request.form["comment_time"])
+    speed_time = int(request.form["speed_time"])
+    return f"Comment Time: {comment_time}s, Speed: {speed_time}s"
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    file = request.files["tokens"] if "tokens" in request.files else \
+           request.files["messages"] if "messages" in request.files else \
+           request.files["comments"] if "comments" in request.files else None
+    if file:
+        file_content = file.read().decode("utf-8").splitlines()
+        if "tokens" in file.filename:
+            global tokens
+            tokens = file_content
+        elif "messages" in file.filename:
+            global messages
+            messages = file_content
+        elif "comments" in file.filename:
+            global comments
+            comments = file_content
+        return "File Uploaded Successfully!"
+    return "No file selected!"
+
+def auto_comment():
+    while True:
+        if post_url and comments and tokens:
+            print(f"Commenting on {post_url} with token {tokens[0]}: {comments[0]}")
+            time.sleep(comment_time)
+
+def auto_message():
+    while True:
+        if convo_number and messages and tokens:
+            print(f"Sending Message to {convo_number} with token {tokens[0]}: {messages[0]}")
+            time.sleep(speed_time)
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=10000)
+    comment_thread = threading.Thread(target=auto_comment, daemon=True)
+    message_thread = threading.Thread(target=auto_message, daemon=True)
+    comment_thread.start()
+    message_thread.start()
+    app.run(debug=True, host="0.0.0.0", port=10000)
